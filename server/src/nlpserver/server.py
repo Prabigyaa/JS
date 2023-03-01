@@ -24,10 +24,10 @@ def completions(params: CompletionParams):
         ]
     return CompletionList(is_incomplete=False, items=items)
 
-@server.command(VARIABLE_NAME_CHANGE)
 def change_variable_name(params: any):
     document = server.workspace.get_document(params.text_document.uri)
 
+    # getting the comments
     comment_list = []
     line = 1
     while(line <= document.lines()):
