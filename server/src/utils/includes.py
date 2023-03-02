@@ -1,17 +1,17 @@
 import pathlib
 
-SERVER_DIR = pathlib.Path(__file__).parents[2]
-PYTHON_EXECUTABLE = pathlib.Path.joinpath(SERVER_DIR, "bin", "python")
+SERVER_DIR: pathlib.Path = pathlib.Path(__file__).parents[2]
+PYTHON_EXECUTABLE: pathlib.Path = pathlib.Path.joinpath(SERVER_DIR, "bin", "python")
 
 def set_server_dir(new_dir: str) :
     global SERVER_DIR
 
-    SERVER_DIR = new_dir
+    SERVER_DIR = pathlib.Path(new_dir)
 
 def set_python_executable(new_path: str):
     global PYTHON_EXECUTABLE
 
-    PYTHON_EXECUTABLE = new_path
+    PYTHON_EXECUTABLE = pathlib.Path(new_path)
 
 def print_all():
     print({

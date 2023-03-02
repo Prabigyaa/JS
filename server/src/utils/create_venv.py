@@ -40,7 +40,7 @@ if __name__=="__main__":
         exit_code = not create_venv() # ensuring same exit code
 
     output = {
-        "PYTHON_EXECUTABLE": PYTHON_EXECUTABLE # the python executable path might be useful for subsequent dependencies installation and others
+        "PYTHON_EXECUTABLE": PYTHON_EXECUTABLE.__str__() # the python executable path might be useful for subsequent dependencies installation and others
     }
 
     print(json.dumps(output), file=sys.stdout)
