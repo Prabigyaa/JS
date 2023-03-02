@@ -56,6 +56,9 @@ async function checkPythonAndNotify(): Promise<boolean> {
  * @returns true if virtual environment is successfully created or is already present, false otherwise
  */
 async function createVirtualEnvironmentAndNotify(): Promise<boolean> {
+	/**
+	 * TODO: check the virtual environment structure before calling with system python installation.
+	 */
 	const [venvCreatedExitCode, venvAlreadyPresentExitCode] = [0, 1];
 
 	let createVenvScript = path.join(serverUtilsDirPath, "create_venv.py");
@@ -64,8 +67,9 @@ async function createVirtualEnvironmentAndNotify(): Promise<boolean> {
 
 	// getting the python executable path
 	createVenv.stdout.on('data', (data: string) => {
-		console.log(`PYTHON_EXECUTABLE_PATH: ${data}`);
-		pythonExecutablePath = data;
+		let pythonPath = JSON.parse(data).PYTHON_EXECUTABLE;
+		console.log(`PYTHON_EXECUTABLE_PATH: ${pythonPath}`);
+		pythonExecutablePath = pythonPath;
 	});
 
 	// getting the error message
@@ -181,10 +185,18 @@ export async function activate(context: vscode.ExtensionContext) {
 			options: {}
 		};
 
+		//Create output channel
+		let nlpClientOutputChannel = vscode.window.createOutputChannel("nlp client");
+
+		//Write to output.
+		nlpClientOutputChannel.appendLine("Logging started");
+		nlpClientOutputChannel.show();
+
 		// Options to control the language client
 		let clientOptions: LanguageClientOptions = {
 			// Register the server for python documents
-			documentSelector: [{ scheme: 'file', language: 'python' }]
+			documentSelector: [{ scheme: 'file', language: 'python' }],
+			outputChannel: nlpClientOutputChannel
 		};
 
 		client = new LanguageClient(
