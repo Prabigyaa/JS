@@ -1,1 +1,2 @@
-include src/nlpserver/VERSION 
+include src/nlpserver/VERSION
+include ./requirements.txt
