@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 
 // Import the language client, language client options and server options from VSCode language client.
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
@@ -10,14 +11,58 @@ import { spawn } from 'child_process';
 
 let client: LanguageClient;
 
-// some variables
-const serverDirPath = path.join(__dirname, '..', 'server');  // path to the server directory
-const serverUtilsDirPath = path.join(serverDirPath, "src", "utils"); // path to folder containing helper python scripts
+/** 
+ * path to server directory
+ */
+const serverDirPath = path.join(__dirname, '..', 'server');
+/**
+ * path to folder containing helper python scripts
+ */
+const serverUtilsDirPath = path.join(serverDirPath, "src", "utils"); 
 
-// executable corresponding to virtual environment
-let pythonExecutablePath = path.join(serverDirPath, "bin", "python"); // path to the python executable (required to change later on)
-let foundPython = false;
-let venvSuccess = false;
+// some variables based on OS (mostly windows is the exception)
+/**
+ * python executable is inside of venv/Scripts in windows system.
+ * 
+ * And in venv/bin in linux systems
+ */
+let executablePath = "bin";
+/**
+ * python3 will most probably cause error in windows ( and in linux python may result in invoking python2 instead of python3)
+ * 
+ * After finding the python corresponding to virtual environment, the name should be changed
+*/
+let pythonName = "python3";
+if (process.platform === "win32") {
+	executablePath = "Scripts";
+	pythonName = "python";
+}
+
+/**
+ * Executable corresponding to virtual environment
+ * 
+ * Change required if new / different virtual environment is used
+ * */
+let pythonExecutablePath: string = path.join(serverDirPath, executablePath, pythonName);
+/**
+ * True if python is found
+ */
+let foundPython: boolean = false;
+/**
+ * True if venv creation was successful or venv was already present
+ */
+let venvSuccess: boolean = false;
+/**
+ * True if predefined virtual environment path exists
+ */
+let venvPresent: boolean = fs.existsSync(pythonExecutablePath);
+
+/**
+ * Changing for ease of use
+ */
+if (venvPresent) {
+	pythonName = pythonExecutablePath;
+}
 
 /**
  * To check if python is present in the system
@@ -26,7 +71,7 @@ let venvSuccess = false;
 async function checkPythonAndNotify(): Promise<boolean> {
 	let checkPythonScript = path.join(serverUtilsDirPath, "check_system_python.py");
 
-	let checkPython = spawn('python3', [checkPythonScript]);
+	let checkPython = spawn(pythonName, [checkPythonScript]);
 	let minorPythonRevion = "0"; // making it string for ease of use
 
 	// getting the minor python revision
@@ -56,20 +101,35 @@ async function checkPythonAndNotify(): Promise<boolean> {
  * @returns true if virtual environment is successfully created or is already present, false otherwise
  */
 async function createVirtualEnvironmentAndNotify(): Promise<boolean> {
+
 	/**
-	 * TODO: check the virtual environment structure before calling with system python installation.
+	 * If virtual environment is already present, then there is no point in checking through python.
+	 * 
+	 * The error in the python should be handled by foundPython variable
+	 * 
+	 * i.e. if the python corresponding to the path isn't a proper python installation.
 	 */
+	if (foundPython && venvPresent) {
+		vscode.window.showInformationMessage("Virtual Environment already present");
+		return true;
+	} 
+
 	const [venvCreatedExitCode, venvAlreadyPresentExitCode] = [0, 1];
 
 	let createVenvScript = path.join(serverUtilsDirPath, "create_venv.py");
 
-	let createVenv = spawn('python3', [createVenvScript]);
+	let createVenv = spawn(pythonName, [createVenvScript]);
 
 	// getting the python executable path
 	createVenv.stdout.on('data', (data: string) => {
 		let pythonPath = JSON.parse(data).PYTHON_EXECUTABLE;
 		console.log(`PYTHON_EXECUTABLE_PATH: ${pythonPath}`);
 		pythonExecutablePath = pythonPath;
+
+		/**
+		 * Changing again as new path is set
+		 */
+		venvPresent = fs.existsSync(pythonExecutablePath);
 	});
 
 	// getting the error message
