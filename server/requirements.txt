@@ -1,2 +1,3 @@
 pygls
 comment-parser
+tree_sitter

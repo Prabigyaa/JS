@@ -6,11 +6,27 @@ from lsprotocol.types import (
     CompletionParams,
     TEXT_DOCUMENT_DID_CHANGE,
     DidChangeTextDocumentParams,
+    TEXT_DOCUMENT_DID_OPEN,
+    DidOpenTextDocumentParams
 )
 
 from comment_parser import comment_parser
 
+import treesitter
+
 server = LanguageServer("nlpserver", "v0.1")
+
+
+@server.feature(TEXT_DOCUMENT_DID_OPEN)
+def document_open(params: DidOpenTextDocumentParams):
+    """
+    On opening text document, the server should set the language for the parser
+    """
+
+    language = params.text_document.language_id
+
+    if treesitter.set_parsing_language(language=language):
+        server.show_message_log(f"Successfully set the language to {language}.")
 
 
 @server.feature(TEXT_DOCUMENT_COMPLETION)
@@ -68,6 +84,10 @@ def add_quick_fix_required(params: DidChangeTextDocumentParams):
 
 def start_server():
     server.start_io()
+
+    treesitter.create_language_objects(server.show_message_log)
+
+    server.show_message_log(f"Created Language objects for languages: f{treesitter.LANGUAGES_BEING_PARSED}")
 
 
 if __name__ == "__main__":
