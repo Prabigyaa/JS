@@ -13,6 +13,7 @@ from lsprotocol.types import (
 from comment_parser import comment_parser
 
 import treesitter
+import asyncio
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -85,9 +86,12 @@ def add_quick_fix_required(params: DidChangeTextDocumentParams):
 def start_server():
     server.start_io()
 
-    treesitter.create_language_objects(server.show_message_log)
+    if not asyncio.run(treesitter.create_language_objects(server.show_message_log)):
+        server.show_message_log("Failed to create language objects.")
+    else:
+        server.show_message_log("Creation of language objects succeeded.")
 
-    server.show_message_log(f"Created Language objects for languages: f{treesitter.LANGUAGES_BEING_PARSED}")
+    server.show_message_log(f"Created Language objects for languages: {treesitter.LANGUAGES_BEING_PARSED}")
 
 
 if __name__ == "__main__":
