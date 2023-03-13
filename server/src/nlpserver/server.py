@@ -15,6 +15,8 @@ from comment_parser import comment_parser
 import treesitter
 import asyncio
 
+import events
+
 server = LanguageServer("nlpserver", "v0.1")
 
 
@@ -27,7 +29,7 @@ def document_open(params: DidOpenTextDocumentParams):
     language = params.text_document.language_id
 
     if treesitter.set_parsing_language(language=language):
-        server.show_message_log(f"Successfully set the language to {language}.")
+        log(f"Successfully set the language to {language}.")
 
 
 @server.feature(TEXT_DOCUMENT_COMPLETION)
@@ -80,18 +82,27 @@ def add_quick_fix_required(params: DidChangeTextDocumentParams):
             [comment.line_number(), comment.text(), comment.is_multiline()]
         )
 
-    server.show_message_log(comments_list.__str__())
+    log(comments_list.__str__())
+
+
+@events.on_event("log")
+def log_to_output(message: str):
+    server.show_message_log(message)
+
+
+def log(message: str):
+    events.post_event("log", message)
 
 
 def start_server():
     server.start_io()
 
-    if not asyncio.run(treesitter.create_language_objects(server.show_message_log)):
-        server.show_message_log("Failed to create language objects.")
+    if not asyncio.run(treesitter.create_language_objects()):
+        log("Failed to create language objects.")
     else:
-        server.show_message_log("Creation of language objects succeeded.")
+        log("Creation of language objects succeeded.")
 
-    server.show_message_log(f"Created Language objects for languages: {treesitter.LANGUAGES_BEING_PARSED}")
+    log(f"Created Language objects for languages: {treesitter.LANGUAGES_BEING_PARSED}")
 
 
 if __name__ == "__main__":

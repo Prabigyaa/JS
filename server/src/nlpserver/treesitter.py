@@ -6,9 +6,9 @@ from tree_sitter import Language, Parser
 from pathlib import Path
 import sys
 
-from typing import Callable
-
 import asyncio
+
+import events
 
 # adding src to path
 module_path = Path(__file__).resolve()
@@ -50,11 +50,8 @@ BASE_URL = "https://github.com/tree-sitter"
 
 
 async def create_language_objects(
-    log_output: Callable[..., None] | None = None
 ) -> bool:
     """
-    Expects a callback function for logging.
-
     Returns True if at least one language object could be created false otherwise
     """
 
@@ -64,10 +61,9 @@ async def create_language_objects(
 
         Returns Coroutines conatining the processes
         """
-        if log_output is not None:
-            log_output(
-                f"Cloning {BASE_URL}/tree-sitter-{language} to {LANGUAGE_REPOS_DIR.__str__()}"
-            )
+        events.post_event("log",
+                          f"Cloning {BASE_URL}/tree-sitter-{language} to {LANGUAGE_REPOS_DIR.__str__()}"
+                          )
         return asyncio.create_subprocess_exec(
             "git",
             "clone",
@@ -89,22 +85,19 @@ async def create_language_objects(
 
             # this isn't full proof (except POSIX)
             if return_code is not None and return_code > -1:
-                if log_output is not None:
-                    log_output(f"Completed cloning language repo for {LANGUAGES[i]}")
+                events.post_event("log", f"Completed cloning language repo for {LANGUAGES[i]}")
             else:
                 failed.append(i)
-                if log_output is not None:
-                    log_output(
-                        f"Failed cloning language repo for {LANGUAGES[i]}, Error Code: {return_code}"
-                    )
+                events.post_event("log",
+                                  f"Failed cloning language repo for {LANGUAGES[i]}, Error Code: {return_code}"
+                                  )
 
     # if it didn't fail then it probably succeeded
     succeded = [language for i, language in enumerate(LANGUAGES) if i not in failed]
 
     # exit if none of the processes succeded
     if not succeded.__len__() > 0:
-        if log_output is not None:
-            log_output("Couldn't create language object.")
+        events.post_event("log", "Couldn't create language object.")
         return False
 
     library_path = pathlib.Path.joinpath(BUILD_DIR, "languages.so")
@@ -120,8 +113,7 @@ async def create_language_objects(
             for language in succeded
         ],
     ):
-        if log_output is not None:
-            log_output(f"Built library with languages {succeded}")
+        events.post_event("log", "Built library with languages {succeded}")
 
     for language in succeded:
         LANGUAGE_OBJECTS.append(Language(library_path.__str__(), language))
@@ -150,5 +142,8 @@ def set_parsing_language(language: str) -> bool:
 
 
 if __name__ == "__main__":
-    asyncio.run(create_language_objects(print))
+    # adding print function for logging
+    events.subscribe("log", print)
+
+    asyncio.run(create_language_objects())
     set_parsing_language("c")
