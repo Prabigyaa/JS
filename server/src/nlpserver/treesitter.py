@@ -41,6 +41,9 @@ LANGUAGES = ["python", "c"]
 # updated only after the language library is built
 LANGUAGE_OBJECTS: list[Language] = []
 LANGUAGES_BEING_PARSED: list[str] = []
+PROPERTIES: dict = {
+    "current-language": None
+}
 
 # the language parser
 PARSER: Parser = Parser()
@@ -113,7 +116,7 @@ async def create_language_objects(
             for language in succeded
         ],
     ):
-        events.post_event("log", "Built library with languages {succeded}")
+        events.post_event("log", f"Built library with languages {succeded}")
 
     for language in succeded:
         LANGUAGE_OBJECTS.append(Language(library_path.__str__(), language))
@@ -133,7 +136,7 @@ def set_parsing_language(language: str) -> bool:
     for lang in LANGUAGE_OBJECTS:
         if lang.name.lower() == language.lower():
             found = True
-
+            PROPERTIES["current-language"] = lang
             PARSER.set_language(lang)
 
             break

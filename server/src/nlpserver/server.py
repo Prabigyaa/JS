@@ -7,13 +7,14 @@ from lsprotocol.types import (
     TEXT_DOCUMENT_DID_CHANGE,
     DidChangeTextDocumentParams,
     TEXT_DOCUMENT_DID_OPEN,
-    DidOpenTextDocumentParams
+    DidOpenTextDocumentParams,
+    INITIALIZED,
+    InitializedParams,
 )
 
 from comment_parser import comment_parser
 
 import treesitter
-import asyncio
 
 import events
 
@@ -25,6 +26,7 @@ def document_open(params: DidOpenTextDocumentParams):
     """
     On opening text document, the server should set the language for the parser
     """
+    log(f"Opened text document of language {params.text_document.language_id}")
 
     language = params.text_document.language_id
 
@@ -84,6 +86,20 @@ def add_quick_fix_required(params: DidChangeTextDocumentParams):
 
     log(comments_list.__str__())
 
+    # using treesitter
+    tree = treesitter.PARSER.parse(document.source.encode())
+
+    if treesitter.PROPERTIES["current-language"] is not None:
+        query = treesitter.PROPERTIES["current-language"].query(
+            """
+        (function_definition
+        name: (identifier) @function.def"""
+        )
+
+        captures = query.captures(tree.root_node)
+
+        log(captures.__str__())
+
 
 @events.on_event("log")
 def log_to_output(message: str):
@@ -94,15 +110,27 @@ def log(message: str):
     events.post_event("log", message)
 
 
+@server.feature(INITIALIZED)
+async def after_initialized(params: InitializedParams):
+    log("Attempting to create language objects.")
+
+    succeded = await treesitter.create_language_objects()
+
+    if succeded:
+        log(
+            f"Created Language objects for languages: {treesitter.LANGUAGES_BEING_PARSED}"
+        )
+    else:
+        log("Failed to create language objects.")
+
+
 def start_server():
+    """
+    Starts the server
+    """
     server.start_io()
 
-    if not asyncio.run(treesitter.create_language_objects()):
-        log("Failed to create language objects.")
-    else:
-        log("Creation of language objects succeeded.")
-
-    log(f"Created Language objects for languages: {treesitter.LANGUAGES_BEING_PARSED}")
+    # nothing after this will be executed as server runs on loop
 
 
 if __name__ == "__main__":
