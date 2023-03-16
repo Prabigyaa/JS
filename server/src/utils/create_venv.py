@@ -10,6 +10,7 @@
 import venv
 import sys
 import json
+import platform
 
 from includes import SERVER_DIR, PYTHON_EXECUTABLE, set_python_executable
 
@@ -26,8 +27,13 @@ def is_virtual_env_available() -> bool:
 
 def create_venv() -> bool:
     try:
+        # difficult to create symlinks in windows
+        use_symlinks = not platform.system() == "Windows"
         env_builder = venv.EnvBuilder(
-            with_pip=True, system_site_packages=True, upgrade_deps=True, symlinks=True
+            with_pip=True,
+            system_site_packages=use_symlinks,  # if windows, there is no point in copying whole lot of packages
+            upgrade_deps=True,
+            symlinks=use_symlinks,  # difficult to create symlinks in windows
         )
         env_builder.create(SERVER_DIR)
         set_python_executable(
