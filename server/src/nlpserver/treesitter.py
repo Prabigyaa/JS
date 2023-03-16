@@ -41,7 +41,7 @@ LANGUAGES = ["python", "c"]
 # updated only after the language library is built
 LANGUAGE_OBJECTS: list[Language] = []
 LANGUAGES_BEING_PARSED: list[str] = []
-PROPERTIES: dict = {
+PROPERTIES: dict[str, Language | None] = {
     "current-language": None
 }
 
