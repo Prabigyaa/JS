@@ -12,7 +12,7 @@ import sys
 import json
 import platform
 
-from includes import SERVER_DIR, PYTHON_EXECUTABLE, set_python_executable
+import includes
 
 
 def is_virtual_env_available() -> bool:
@@ -35,9 +35,11 @@ def create_venv() -> bool:
             upgrade_deps=True,
             symlinks=use_symlinks,  # difficult to create symlinks in windows
         )
-        env_builder.create(SERVER_DIR)
-        set_python_executable(
-            env_builder.ensure_directories(SERVER_DIR).__getattribute__("env_exec_cmd")
+        env_builder.create(includes.SERVER_DIR)
+        includes.set_python_executable(
+            env_builder.ensure_directories(includes.SERVER_DIR).__getattribute__(
+                "env_exec_cmd"
+            )
         )
         return True
     except Exception as e:
@@ -54,7 +56,7 @@ if __name__ == "__main__":
 
     output = {
         # the python executable path might be useful for subsequent dependencies installation and others
-        "PYTHON_EXECUTABLE": PYTHON_EXECUTABLE.__str__()
+        "PYTHON_EXECUTABLE": includes.PYTHON_EXECUTABLE.__str__()
     }
 
     print(json.dumps(output), file=sys.stdout)
