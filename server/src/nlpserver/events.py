@@ -4,6 +4,8 @@ import logging
 
 EVENT_AND_EVENT_HANDLERS: dict[str, list[Callable[..., Any]]] = defaultdict(list)
 
+event_logger = logging.getLogger("event_logger")
+
 
 def subscribe(event_name: str, event_handler: Callable[..., Any]):
     """
@@ -18,7 +20,7 @@ def post_event(event_name: str, *args, **kwargs):
     """
 
     if event_name not in EVENT_AND_EVENT_HANDLERS:
-        logging.debug(f"The event {event_name} not found.")
+        event_logger.debug(f"The event {event_name} not found.")
 
     for func in EVENT_AND_EVENT_HANDLERS[event_name]:
         func(*args, **kwargs)

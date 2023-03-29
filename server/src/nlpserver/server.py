@@ -12,15 +12,11 @@ from lsprotocol.types import (
     InitializedParams,
 )
 
-from comment_parser import comment_parser
-
 import treesitter
 
-from tree_sitter import Node
-
-from collections import defaultdict
-
 import events
+
+from comments_extraction_python import parse_document
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -61,96 +57,11 @@ def completions(params: CompletionParams):
 def add_quick_fix_required(params: DidChangeTextDocumentParams):
     document = server.workspace.get_document(params.text_document.uri)
 
-    mime = None
-    language_id = document.language_id
+    identifier_with_comments, identifier_with_points = parse_document(document)
 
-    if language_id == "python":
-        mime = "text/x-python"
-    elif language_id == "javascript":
-        mime = "application/javascript"
-    elif language_id == "c++":
-        mime = "text/x-c++"
-    elif language_id == "c":
-        mime = "text/x-c"
-    elif language_id == "html":
-        mime = "text/html"
-    elif language_id == "java":
-        mime = "text/x-java-source"
-    elif language_id == "shell":
-        mime = "text/x-shellscript"
-
-    comments = comment_parser.extract_comments(document.path, mime=mime)
-
-    # making a list
-    comments_list = []
-    for comment in comments:
-        comments_list.append(
-            [comment.line_number(), comment.text(), comment.is_multiline()]
-        )
-
-    # log(comments_list.__str__())
-
-    # using treesitter
-
-    def read_callable(byte_offset, point) -> bytes | None:
-        row, column = point
-        if row >= len(document.lines) or column >= len(document.lines[row]):
-            return None
-        return document.lines[row][column:].encode("utf8")
-
-    tree = treesitter.PARSER.parse(read_callable)
-
-    if treesitter.PROPERTIES["current-language"] is not None:
-        query = treesitter.PROPERTIES["current-language"].query(
-            """
-            [
-                (
-                    [
-                        (
-                            (comment)* @comment.function
-                            (function_definition
-                                name: (identifier) @name.function) @definition.function
-                        )
-                        (
-                            (comment)* @comment_with_identifier
-                            (identifier) @identifiers_with_comment
-                        )
-                        (
-                            (comment)* @standalone_comment
-                        )
-                    ]
-                )
-                (
-                    [
-                        (
-                            (comment)* @comment.function
-                            (function_definition
-                                name: (identifier) @name.function) @definition.function
-                        )
-                        (
-                            (comment)* @comment_with_identifier
-                            (identifier) @identifiers_with_comment
-                        )
-                        (
-                            (identifier) @standalone_identifier
-                        )
-                    ]
-                )
-            ]
-
-            """
-        )
-        captures = query.captures(tree.root_node)
-
-        node_name_and_nodes: dict[str, list[Node]] = defaultdict(list)
-
-        for node, node_name in captures:
-            # removing the duplicate entries
-            if node not in node_name_and_nodes[node_name]:
-                node_name_and_nodes[node_name].append(node)
-
-        for node_name, nodes in node_name_and_nodes.items():
-            log(f"\n{node_name}: {nodes}\n")
+    """
+        TODO
+    """
 
 
 @events.on_event("log")
