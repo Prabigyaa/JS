@@ -1,26 +1,57 @@
-from pygls.server import LanguageServer
-from lsprotocol.types import (
-    TEXT_DOCUMENT_COMPLETION,
-    CompletionItem,
-    CompletionList,
-    CompletionParams,
-    TEXT_DOCUMENT_DID_CHANGE,
-    DidChangeTextDocumentParams,
-    TEXT_DOCUMENT_DID_OPEN,
-    DidOpenTextDocumentParams,
-    INITIALIZED,
-    InitializedParams,
-)
+"""
+The lsp server
 
-from comment_parser import comment_parser
+TODO make the server logic abstract and implement this for multiple languages
+TODO Link diagnostic, code actions and quick fixes.
 
-import treesitter
+For now, the logic for diagnostic, code action and fixes are not linked.
+For proper handling of diagnostic and creating code action and fixes based on the diagnostics
+these things should be properly linked and made dynamic as to scale properly if new features are added
 
-from tree_sitter import Node
+Also, the language supported is only python for now.
 
-from collections import defaultdict
+"""
+
+
+import random
 
 import events
+import treesitter
+from comments_extraction_python import parse_document
+from lsprotocol.types import (
+    INITIALIZE,
+    INITIALIZED,
+    TEXT_DOCUMENT_CODE_ACTION,
+    TEXT_DOCUMENT_COMPLETION,
+    TEXT_DOCUMENT_DID_CHANGE,
+    TEXT_DOCUMENT_DID_OPEN,
+    CodeAction,
+    CodeActionKind,
+    CodeActionParams,
+    Command,
+    CompletionItem,
+    CompletionItemKind,
+    CompletionList,
+    CompletionOptions,
+    CompletionParams,
+    Diagnostic,
+    DiagnosticSeverity,
+    DidChangeTextDocumentParams,
+    DidOpenTextDocumentParams,
+    InitializedParams,
+    InitializeParams,
+    Position,
+    Range,
+    ServerCapabilities,
+    TextDocumentContentChangeEvent_Type1,
+    TextDocumentEdit,
+    TextDocumentIdentifier,
+    TextEdit,
+    VersionedTextDocumentIdentifier,
+    WorkspaceEdit,
+)
+from pygls.protocol import _dict_to_object
+from pygls.server import LanguageServer
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -29,6 +60,8 @@ server = LanguageServer("nlpserver", "v0.1")
 def document_open(params: DidOpenTextDocumentParams):
     """
     On opening text document, the server should set the language for the parser
+
+    Also, publish warnings like some text document has changed
     """
     log(f"Opened text document of language {params.text_document.language_id}")
 
@@ -37,120 +70,187 @@ def document_open(params: DidOpenTextDocumentParams):
     if treesitter.set_parsing_language(language=language):
         log(f"Successfully set the language to {language}.")
 
+    # just a hack, needs change or different diagnostic method on initialization
+    create_warnings(  # create warning on first initialization
+        DidChangeTextDocumentParams(
+            VersionedTextDocumentIdentifier(
+                0
+                if params.text_document.version is None
+                else params.text_document.version,
+                params.text_document.uri,
+            ),
+            [
+                TextDocumentContentChangeEvent_Type1(
+                    Range(Position(0, 0), Position(0, 0)), text=""
+                )
+            ],
+        )
+    )
+
 
 @server.feature(TEXT_DOCUMENT_COMPLETION)
 def completions(params: CompletionParams):
     """
-    Just for checking if the extension initialized successfully.
+    Suggest completions for variable names
 
-    When `hello.` is typed and `ctrl + space` is pressed,
-    it should give completion options `world` and `friend`.
+    TODO get variable names based on the comments
     """
-    items = []
     document = server.workspace.get_document(params.text_document.uri)
-    current_line = document.lines[params.position.line].strip()
-    if current_line.endswith("hello."):
-        items = [
-            CompletionItem(label="world"),
-            CompletionItem(label="friend"),
-        ]
-    return CompletionList(is_incomplete=False, items=items)
+    current_line_number = params.position.line
+
+    identifier_with_comments, identifier_with_points = parse_document(document)
+
+    completion_items = []
+
+    for identifier, comments in identifier_with_comments.items():
+        for (start, end) in identifier_with_points[identifier]:
+            if (current_line_number == start[0]) or (current_line_number == end[0]):
+                # TODO Variable naming logic goes here
+                # var_name = get_variable_name_from_comments(comments)
+
+                completion_items.append(CompletionItem("variable_name_1"))
+                completion_items.append(
+                    CompletionItem("Variable_name_2", kind=CompletionItemKind.Variable)
+                )
+
+    return CompletionList(is_incomplete=False, items=completion_items)
 
 
 @server.feature(TEXT_DOCUMENT_DID_CHANGE)
-def add_quick_fix_required(params: DidChangeTextDocumentParams):
+def create_warnings(params: DidChangeTextDocumentParams):
+    """
+    Create warnings for incorrect variable names
+
+    TODO check incorrect/ non-optimal variable names
+    """
     document = server.workspace.get_document(params.text_document.uri)
 
-    mime = None
-    language_id = document.language_id
+    identifier_with_comments, identifier_with_points = parse_document(document)
+    warnings_list: list[Diagnostic] = []
 
-    if language_id == "python":
-        mime = "text/x-python"
-    elif language_id == "javascript":
-        mime = "application/javascript"
-    elif language_id == "c++":
-        mime = "text/x-c++"
-    elif language_id == "c":
-        mime = "text/x-c"
-    elif language_id == "html":
-        mime = "text/html"
-    elif language_id == "java":
-        mime = "text/x-java-source"
-    elif language_id == "shell":
-        mime = "text/x-shellscript"
+    for identifer, points in identifier_with_points.items():
 
-    comments = comment_parser.extract_comments(document.path, mime=mime)
+        # randomly setting the hint for now
+        if random.randint(0, 1):
+            severity = DiagnosticSeverity.Hint
+            message = f"Change to Variable Name: {random.random() * 100}"
+        else:
+            severity = DiagnosticSeverity.Warning
+            message = "Variable Name Change Required"
 
-    # making a list
-    comments_list = []
-    for comment in comments:
-        comments_list.append(
-            [comment.line_number(), comment.text(), comment.is_multiline()]
+        for start, end in points:
+            warnings_list.append(
+                Diagnostic(
+                    Range(Position(*start), Position(*end)),
+                    message,
+                    severity=severity,
+                    source="NLP Comment Naming Extension",
+                )
+            )
+
+    server.publish_diagnostics(document.uri, warnings_list)
+
+
+@server.command("nlp-bridge.rename_identifier")
+def rename_identifier(ls: LanguageServer, *args):
+    """ "
+    Rename the identifier on rename request
+
+    TODO get new identifier name based on the comments
+    """
+    list_args = args[0]
+
+    """
+    This is very static, may fail if parameters are changed in any way.
+    TODO change this
+    """
+    text_document = TextDocumentIdentifier(_dict_to_object(list_args[0]).uri)
+    range = Range(
+        _dict_to_object(list_args[1]).start, _dict_to_object(list_args[1]).end
+    )
+
+    # TODO change this to not use any hacks
+    if (
+        isinstance(list_args, list)
+        and isinstance(text_document, TextDocumentIdentifier)
+        and isinstance(range, Range)
+    ):
+
+        document = ls.workspace.get_document(text_document.uri)
+        problem_start = document.offset_at_position(range.start)
+        problem_end = document.offset_at_position(range.end)
+
+        old_identifier = document.source[problem_start:problem_end]
+
+        # TODO new_identifier_logic
+        new_identifier = f"{old_identifier}_{random.randint(0, 10)}"
+
+        versioned_text_document = VersionedTextDocumentIdentifier(
+            document.version or 0, document.uri
         )
+        edits = [TextEdit(range=range, new_text=new_identifier)]
 
-    # log(comments_list.__str__())
-
-    # using treesitter
-
-    def read_callable(byte_offset, point) -> bytes | None:
-        row, column = point
-        if row >= len(document.lines) or column >= len(document.lines[row]):
-            return None
-        return document.lines[row][column:].encode("utf8")
-
-    tree = treesitter.PARSER.parse(read_callable)
-
-    if treesitter.PROPERTIES["current-language"] is not None:
-        query = treesitter.PROPERTIES["current-language"].query(
-            """
-            [
-                (
-                    [
-                        (
-                            (comment)* @comment.function
-                            (function_definition
-                                name: (identifier) @name.function) @definition.function
-                        )
-                        (
-                            (comment)* @comment_with_identifier
-                            (identifier) @identifiers_with_comment
-                        )
-                        (
-                            (comment)* @standalone_comment
-                        )
-                    ]
-                )
-                (
-                    [
-                        (
-                            (comment)* @comment.function
-                            (function_definition
-                                name: (identifier) @name.function) @definition.function
-                        )
-                        (
-                            (comment)* @comment_with_identifier
-                            (identifier) @identifiers_with_comment
-                        )
-                        (
-                            (identifier) @standalone_identifier
-                        )
-                    ]
-                )
+        workspacedit = WorkspaceEdit(
+            document_changes=[
+                TextDocumentEdit(text_document=versioned_text_document, edits=edits)
             ]
-
-            """
         )
-        captures = query.captures(tree.root_node)
 
-        node_name_and_nodes: dict[str, list[Node]] = defaultdict(list)
+        ls.apply_edit(workspacedit)
 
-        for node, node_name in captures:
-            # removing the duplicate entries
-            if node not in node_name_and_nodes[node_name]:
-                node_name_and_nodes[node_name].append(node)
 
-        for node_name, nodes in node_name_and_nodes.items():
-            log(f"\n{node_name}: {nodes}\n")
+@server.feature(TEXT_DOCUMENT_CODE_ACTION)
+def on_code_action(params: CodeActionParams) -> list[CodeAction]:
+    """
+    Publish rename Identifier code action
+
+    """
+
+    return [
+        CodeAction(
+            "Rename Identifier",
+            CodeActionKind.QuickFix,
+            command=Command(
+                title="rename_identifer",
+                # the way it's implemented in other projects is not to give command here but handle that in CODE_ACTION_RESOLVE
+                command="nlp-bridge.rename_identifier",
+                arguments=[params.text_document, params.range],
+            ),
+        )
+    ]
+
+
+@server.feature(INITIALIZE)
+def on_initialize(params: InitializeParams) -> ServerCapabilities:
+    """
+    Register server capabilities on initialization
+
+    TODO properly set all the server capabilities
+    """
+
+    return ServerCapabilities(
+        code_action_provider=True,
+        completion_provider=CompletionOptions(resolve_provider=True),
+    )
+
+
+@server.feature(INITIALIZED)
+async def after_initialized(params: InitializedParams):
+    """
+    Setup tree_sitter after initialization
+    """
+
+    log("Attempting to create language objects.")
+
+    succeded = await treesitter.create_language_objects()
+
+    if succeded:
+        log(
+            "Created Language objects for languages:" +
+            str(treesitter.LANGUAGES_BEING_PARSED)
+        )
+    else:
+        log("Failed to create language objects.")
 
 
 @events.on_event("log")
@@ -160,20 +260,6 @@ def log_to_output(message: str):
 
 def log(message: str):
     events.post_event("log", message)
-
-
-@server.feature(INITIALIZED)
-async def after_initialized(params: InitializedParams):
-    log("Attempting to create language objects.")
-
-    succeded = await treesitter.create_language_objects()
-
-    if succeded:
-        log(
-            f"Created Language objects for languages: {treesitter.LANGUAGES_BEING_PARSED}"
-        )
-    else:
-        log("Failed to create language objects.")
 
 
 def start_server():
