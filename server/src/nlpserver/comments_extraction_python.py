@@ -1,5 +1,4 @@
 from pygls.workspace import Document
-from lsprotocol.types import Position
 from tree_sitter import Node
 
 import treesitter
@@ -57,8 +56,8 @@ def associate_comment_with_identifier(
     identifer_with_points: dict[str, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(list)
 
     docstrings: list[Node] = node_types_and_nodes["string"]
-    identifiers: list[Node] = node_types_and_nodes["identifiers"]
-    comments: list[Node] = node_types_and_nodes["comments"]
+    identifiers: list[Node] = node_types_and_nodes["identifier"]
+    comments: list[Node] = node_types_and_nodes["comment"]
 
     # checking identifiers after docstring
     for node in docstrings:
