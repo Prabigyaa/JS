@@ -5,9 +5,9 @@
             (expression_statement (string) @module.comment)
     )
     
-    ;; docstring before function
+    ;; docstring before function or docstring inside function or both
     (
-       	(expression_statement (string) @function.outer_docstring)
+       	(expression_statement (string) ? @function.outer_docstring) ?
         . 
         (function_definition
             name: ( identifier ) @function.name
@@ -16,16 +16,17 @@
                 )?
             )
     )
-
+    
+    ;; comments before function or comments inside function or both
     (
-        (comment) @function.outer_comment
+        (comment) ? @function.outer_comment
         . 
         (function_definition
             name: ( identifier ) @function.name
             body: ( block
                 (expression_statement . (string)? @function.inner_comment ) ?
                 )?
-            )?
+            )
     )
 
     ;; Docstring before identifier
