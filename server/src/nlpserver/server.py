@@ -53,7 +53,13 @@ from lsprotocol.types import (
 from pygls.protocol import _dict_to_object
 from pygls.server import LanguageServer
 
+from collections import defaultdict
+
 server = LanguageServer("nlpserver", "v0.1")
+
+# setting these global as these are updated on each document update
+IDENTIFIER_WITH_COMMENTS: dict[str, list[str]] = defaultdict(list)
+IDENTIFIER_WITH_POINTS: dict[str, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(list)
 
 
 @server.feature(TEXT_DOCUMENT_DID_OPEN)
@@ -123,12 +129,14 @@ def create_warnings(params: DidChangeTextDocumentParams):
 
     TODO check incorrect/ non-optimal variable names
     """
+    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS
+
     document = server.workspace.get_document(params.text_document.uri)
 
-    identifier_with_comments, identifier_with_points = parse_document(document)
+    IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS = parse_document(document)
     warnings_list: list[Diagnostic] = []
 
-    for identifer, points in identifier_with_points.items():
+    for identifer, points in IDENTIFIER_WITH_POINTS.items():
 
         # randomly setting the hint for now
         if random.randint(0, 1):
@@ -145,6 +153,7 @@ def create_warnings(params: DidChangeTextDocumentParams):
                     message,
                     severity=severity,
                     source="NLP Comment Naming Extension",
+                    code="WN_100",  # wrong name
                 )
             )
 
@@ -200,11 +209,27 @@ def rename_identifier(ls: LanguageServer, *args):
 
 
 @server.feature(TEXT_DOCUMENT_CODE_ACTION)
-def on_code_action(params: CodeActionParams) -> list[CodeAction]:
+def on_code_action(params: CodeActionParams) -> list[CodeAction] | None:
     """
     Publish rename Identifier code action
 
     """
+
+    document = params.text_document
+    range = params.range
+
+    # check if code action are available for given range
+
+    # checking if variable name can be improved
+
+    improvable = False
+
+    for identifier, _ranges in IDENTIFIER_WITH_POINTS.items():
+        for (start, end) in _ranges:
+            if range.start.line >= start[0] and range.end.line <= end[0]:  # if in between the lines of identifer
+                if range.start.character >= start[1] and range.end.character <= end[1]:  # if in between the characters of identifer
+                    improvable = True
+                    break
 
     return [
         CodeAction(
@@ -214,10 +239,10 @@ def on_code_action(params: CodeActionParams) -> list[CodeAction]:
                 title="rename_identifer",
                 # the way it's implemented in other projects is not to give command here but handle that in CODE_ACTION_RESOLVE
                 command="nlp-bridge.rename_identifier",
-                arguments=[params.text_document, params.range],
+                arguments=[document, range],
             ),
         )
-    ]
+    ] if improvable else None
 
 
 @server.feature(INITIALIZE)
@@ -246,8 +271,8 @@ async def after_initialized(params: InitializedParams):
 
     if succeded:
         log(
-            "Created Language objects for languages:" +
-            str(treesitter.LANGUAGES_BEING_PARSED)
+            "Created Language objects for languages:"
+            + str(treesitter.LANGUAGES_BEING_PARSED)
         )
     else:
         log("Failed to create language objects.")
