@@ -1,7 +1,10 @@
 import pathlib
+import platform
 
 SERVER_DIR: pathlib.Path = pathlib.Path(__file__).parents[2]
-PYTHON_EXECUTABLE: pathlib.Path = pathlib.Path.joinpath(SERVER_DIR, "bin", "python")
+PYTHON_EXECUTABLE: pathlib.Path = pathlib.Path.joinpath(
+    SERVER_DIR, "Scripts" if platform.system() == "Windows" else "bin", "python"
+)
 
 
 def set_server_dir(new_dir: str):
@@ -17,10 +20,7 @@ def set_python_executable(new_path: str):
 
 
 def print_all():
-    print({
-        "SERVER_DIR": SERVER_DIR,
-        "PYTHON_EXECUTABLE": PYTHON_EXECUTABLE
-    })
+    print({"SERVER_DIR": SERVER_DIR, "PYTHON_EXECUTABLE": PYTHON_EXECUTABLE})
 
 
 if __name__ == "__main__":
