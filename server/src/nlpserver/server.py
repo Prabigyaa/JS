@@ -59,7 +59,11 @@ server = LanguageServer("nlpserver", "v0.1")
 
 # setting these global as these are updated on each document update
 IDENTIFIER_WITH_COMMENTS: dict[str, list[str]] = defaultdict(list)
-IDENTIFIER_WITH_POINTS: dict[str, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(list)
+IDENTIFIER_WITH_POINTS: dict[
+    str, list[tuple[tuple[int, int], tuple[int, int]]]
+] = defaultdict(list)
+# Empty dict
+ALL_LONE_COMMENTS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {}
 
 
 @server.feature(TEXT_DOCUMENT_DID_OPEN)
@@ -100,24 +104,63 @@ def completions(params: CompletionParams):
     Suggest completions for variable names
 
     TODO get variable names based on the comments
+
+    Doesn't work properly
+
+    TODO create a way to suggest variable name right after comment
     """
     document = server.workspace.get_document(params.text_document.uri)
     current_line_number = params.position.line
-
-    identifier_with_comments, identifier_with_points = parse_document(document)
+    current_line_start_index = document.offset_at_position(
+        Position(current_line_number, 0)
+    )
+    current_pos_index = document.offset_at_position(params.position)
 
     completion_items = []
 
-    for identifier, comments in identifier_with_comments.items():
-        for (start, end) in identifier_with_points[identifier]:
-            if (current_line_number == start[0]) or (current_line_number == end[0]):
-                # TODO Variable naming logic goes here
-                # var_name = get_variable_name_from_comments(comments)
+    """
+    This method is a bit hacky, as there is no way to
+    get the currently being typed identifier name for incomplete identifiers
+    """
+    # for unidentified variables
+    for comment, (start_point, end_point) in ALL_LONE_COMMENTS.items():
 
-                completion_items.append(CompletionItem("variable_name_1"))
-                completion_items.append(
-                    CompletionItem("Variable_name_2", kind=CompletionItemKind.Variable)
-                )
+        current_line = document.lines[current_line_number].strip()
+        first_word_of_the_line = current_line.split()[0]
+
+        # either the current position is the next line to the comment
+        comment_on_next_line = (current_line_number == end_point[0] + 1)
+
+        if comment_on_next_line and (
+            document.word_at_position(params.position) == first_word_of_the_line
+        ):
+            # TODO Variable naming logic goes here
+            # var_name = get_variable_name_from_comments(comments)
+
+            completion_items.append(CompletionItem("variable_name_1"))
+            completion_items.append(
+                CompletionItem("Variable_name_2", kind=CompletionItemKind.Variable)
+            )
+
+
+    # give completion suggestion if it's a variable name after comment
+    for (
+        identifier,
+        comments,
+    ) in IDENTIFIER_WITH_COMMENTS.items():  # checking for all the comments
+
+        for comment in comments:
+            for (start, end) in IDENTIFIER_WITH_POINTS[identifier]:
+                if (current_line_number == start[0]) or (current_line_number == end[0]):
+                    # TODO Variable naming logic goes here
+                    # var_name = get_variable_name_from_comments(comments)
+
+                    completion_items.append(CompletionItem("variable_name_1"))
+                    completion_items.append(
+                        CompletionItem(
+                            "Variable_name_2", kind=CompletionItemKind.Variable
+                        )
+                    )
 
     return CompletionList(is_incomplete=False, items=completion_items)
 
@@ -129,11 +172,11 @@ def create_warnings(params: DidChangeTextDocumentParams):
 
     TODO check incorrect/ non-optimal variable names
     """
-    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS
+    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS
 
     document = server.workspace.get_document(params.text_document.uri)
 
-    IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS = parse_document(document)
+    IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS = parse_document(document)
     warnings_list: list[Diagnostic] = []
 
     for identifer, points in IDENTIFIER_WITH_POINTS.items():
@@ -226,23 +269,31 @@ def on_code_action(params: CodeActionParams) -> list[CodeAction] | None:
 
     for identifier, _ranges in IDENTIFIER_WITH_POINTS.items():
         for (start, end) in _ranges:
-            if range.start.line >= start[0] and range.end.line <= end[0]:  # if in between the lines of identifer
-                if range.start.character >= start[1] and range.end.character <= end[1]:  # if in between the characters of identifer
+            if (
+                range.start.line >= start[0] and range.end.line <= end[0]
+            ):  # if in between the lines of identifer
+                if (
+                    range.start.character >= start[1] and range.end.character <= end[1]
+                ):  # if in between the characters of identifer
                     improvable = True
                     break
 
-    return [
-        CodeAction(
-            "Rename Identifier",
-            CodeActionKind.QuickFix,
-            command=Command(
-                title="rename_identifer",
-                # the way it's implemented in other projects is not to give command here but handle that in CODE_ACTION_RESOLVE
-                command="nlp-bridge.rename_identifier",
-                arguments=[document, range],
-            ),
-        )
-    ] if improvable else None
+    return (
+        [
+            CodeAction(
+                "Rename Identifier",
+                CodeActionKind.QuickFix,
+                command=Command(
+                    title="rename_identifer",
+                    # the way it's implemented in other projects is not to give command here but handle that in CODE_ACTION_RESOLVE
+                    command="nlp-bridge.rename_identifier",
+                    arguments=[document, range],
+                ),
+            )
+        ]
+        if improvable
+        else None
+    )
 
 
 @server.feature(INITIALIZE)

@@ -95,13 +95,29 @@ def associate_comment_with_identifier(
                 identifer_with_points[identifier_name].append((identifier.start_point, identifier.end_point))
                 identifier_with_comment[identifier_name].append(document.source[node.start_byte: node.end_byte])
 
-    return identifier_with_comment, identifer_with_points
+    # associating lone comments with points
+    lone_comment_with_point: dict[str, tuple[tuple[int, int], tuple[int, int]]] = defaultdict(tuple)
+
+    identifier_comment_list: list[str] = []
+    for identifier, comment in identifier_with_comment.items():
+        identifier_comment_list.extend(comment)
+
+    # for all comments not in any other categories
+    for node in comments:
+        comment = document.source[node.start_byte: node.end_byte]
+
+        not_with_identifier = comment not in identifier_comment_list
+
+        if not_with_identifier:
+            lone_comment_with_point[comment] = (node.start_point, node.end_point)
+
+    return (identifier_with_comment, identifer_with_points, lone_comment_with_point)
 
 
 def parse_document(
     document: Document,
 ) -> tuple[
-    dict[str, list[str]], dict[str, list[tuple[tuple[int, int], tuple[int, int]]]]
+    dict[str, list[str]], dict[str, list[tuple[tuple[int, int], tuple[int, int]]]], dict[str, tuple[tuple[int, int], tuple[int, int]]]
 ]:
     """ """
 
@@ -115,6 +131,9 @@ def parse_document(
 
     # associating identifiers with comments
     identifier_with_comment: dict[str, list[str]] = defaultdict(list)
+
+    # associating comments with points
+    lone_comments_with_points: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {}
 
     # associating identifiers with points
     # Point: ((start_line, start_char), (end_line, end_char))
@@ -137,6 +156,7 @@ def parse_document(
                 if node not in node_types_and_nodes[node.type]:
                     node_types_and_nodes[node.type].append(node)
 
+
             for node_type, nodes in node_types_and_nodes.items():
                 events.post_event("log", f"\n{node_type}: {nodes}\n")
 
@@ -146,10 +166,11 @@ def parse_document(
             (
                 identifier_with_comment,
                 identifer_with_points,
+                lone_comments_with_points
             ) = associate_comment_with_identifier(node_types_and_nodes, document)
 
             for identifier, comments in identifier_with_comment.items():
                 points = identifer_with_points[identifier]
                 events.post_event("log", f"{identifier}: {comments}, Points: {points}")
 
-    return identifier_with_comment, identifer_with_points
+    return (identifier_with_comment, identifer_with_points, lone_comments_with_points)

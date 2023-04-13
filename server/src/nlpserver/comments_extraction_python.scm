@@ -63,4 +63,7 @@
         	(expression_statement (assignment left: (identifier) @lone.identifier))
         )
     )
+
+    ;; all the comments, because lone comments couldn't be filtered
+    (comment) @all_comments
 ])
