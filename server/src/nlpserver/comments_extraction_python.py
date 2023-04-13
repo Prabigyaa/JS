@@ -1,13 +1,13 @@
 from pygls.workspace import Document
 from tree_sitter import Node
 
-import treesitter
+from . import treesitter
 
 from pathlib import Path
 
 from collections import defaultdict
 
-import events
+from . import events
 
 # paths
 CURRENT_DIR = Path(__file__).parents[0]

@@ -8,7 +8,7 @@ import sys
 
 import asyncio
 
-import events
+from . import events
 
 # adding src to path
 module_path = Path(__file__).resolve()
