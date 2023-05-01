@@ -52,18 +52,9 @@
         )
     )
 
-    ;; Lone comment (comment without identifier)
-    (
-        (comment) @lone.comment
-        (expression_statement (assignment !left))
-    )
-    
-    ;; Lone identifier (identifier without comment)
-    ( 	(module 
-        	(expression_statement (assignment left: (identifier) @lone.identifier))
-        )
-    )
-
     ;; all the comments, because lone comments couldn't be filtered
     (comment) @all_comments
+
+    ;; all the identifiers, becuase lone identifiers couldn't be filtered
+    (identifier) @all_identifiers
 ])
