@@ -15,9 +15,9 @@ Also, the language supported is only python for now.
 
 import random
 
-from . import events
-from . import treesitter
-from .comments_extraction_python import parse_document
+import events
+import treesitter
+from comments_extraction_python import parse_document
 from lsprotocol.types import (
     INITIALIZE,
     INITIALIZED,
