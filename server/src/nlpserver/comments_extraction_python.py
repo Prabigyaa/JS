@@ -75,13 +75,17 @@ def associate_comment_with_identifier(
     for node in identifiers:
         end_line = node.end_point[0]
         valid_start_line = range(end_line, end_line+2)
+        identifier_name = document.source[node.start_byte: node.end_byte]
 
         for docstring in docstrings:
             # if the docstring starts immediately after the identifier
             if docstring.start_point[0] in valid_start_line:
-                identifier_name = document.source[node.start_byte: node.end_byte]
                 identifer_with_points[identifier_name].append((node.start_point, node.end_point))
                 identifier_with_comment[identifier_name].append(document.source[docstring.start_byte: docstring.end_byte])
+      
+        # keeping track of identifiers even if it's not associated with any comments / docstrings
+        if (node.start_point, node.end_point) not in identifer_with_points[identifier_name]:
+            identifer_with_points[identifier_name].append((node.start_point, node.end_point))
 
     # checking identifiers after comments
     for node in comments:

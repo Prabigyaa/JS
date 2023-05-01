@@ -227,7 +227,8 @@ def rename_identifier(ls: LanguageServer, *args):
         and isinstance(text_document, TextDocumentIdentifier)
         and isinstance(range, Range)
     ):
-
+        range = Range(Position(range.start.line, range.start.character),
+                      Position(range.end.line, range.end.character))
         document = ls.workspace.get_document(text_document.uri)
         problem_start = document.offset_at_position(range.start)
         problem_end = document.offset_at_position(range.end)
@@ -241,6 +242,15 @@ def rename_identifier(ls: LanguageServer, *args):
             document.version or 0, document.uri
         )
         edits = [TextEdit(range=range, new_text=new_identifier)]
+
+        other_locations = IDENTIFIER_WITH_POINTS.get(old_identifier)
+
+        if other_locations is not None:
+            for start, end in other_locations:
+                _range = Range(Position(*start), Position(*end))
+                # if hasn't been edited
+                if _range != range:
+                    edits.append(TextEdit(range=_range, new_text=new_identifier))
 
         workspacedit = WorkspaceEdit(
             document_changes=[
