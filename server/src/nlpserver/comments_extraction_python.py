@@ -1,5 +1,5 @@
 from pygls.workspace import Document
-from tree_sitter import Node
+from tree_sitter import Node, Tree
 
 import treesitter
 
@@ -9,20 +9,28 @@ from collections import defaultdict
 
 import events
 
+from typing import Optional
+
 # paths
 CURRENT_DIR = Path(__file__).parents[0]
 COMMENTS_EXTRACTION_QUERY_FILE = CURRENT_DIR.joinpath("comments_extraction_python.scm")
 
 # the current_document being parsed
-DOCUMENT: Document | None = None
+DOCUMENT: Optional[Document] = None
+
+# old tree of the same document
+OLD_TREE: Optional[Tree] = None
 
 
 def set_document(document: Document):
-    global DOCUMENT
+    global DOCUMENT, OLD_TREE
+
+    if DOCUMENT is None or document.uri != DOCUMENT.uri:
+        OLD_TREE = None
     DOCUMENT = document
 
 
-def read_callable(byte_offset, point) -> bytes | None:
+def read_callable(byte_offset, point) -> Optional[bytes]:
     """
     Function for reading a document incrementally.
     """
@@ -35,11 +43,11 @@ def read_callable(byte_offset, point) -> bytes | None:
     return DOCUMENT.lines[row][column:].encode("utf8")
 
 
-def get_query_from_file(file: Path) -> str | None:
+def get_query_from_file(file: Path) -> Optional[str]:
     """
     To get the query as string
     """
-    query_string: str | None = None
+    query_string: Optional[str] = None
     try:
         with open(file=file, mode="r") as f:
             query_string = f.read()
@@ -116,10 +124,31 @@ def associate_comment_with_identifier(
 
 def parse_document(
     document: Document,
+    changes:  Optional[tuple[int,int,int,tuple[int, int], tuple[int, int], tuple[int, int]]] = None
 ) -> tuple[
     dict[str, list[str]], dict[str, list[tuple[tuple[int, int], tuple[int, int]]]], dict[str, tuple[tuple[int, int], tuple[int, int]]]
 ]:
-    """ """
+    """
+    Return tuple [identifier with comments, identifier with points, lone comments with points]
+
+    This function is used to get identifiers and associated comments. The lone identifiers may be derived from that.
+
+    Parameters
+    ----------
+    document: Document
+        Current document
+    changes: tuple [ start_byte: int, old_end_byte: int, new_end_byte: int, start_point: tuple[int, int], old_end_point: tuple[int, int] new_end_point: tuple[int, int]]
+        The changes from previous document. `None` if it's a new document
+
+    Return
+    ------
+    identifier_with_comments, identifier_with_points, lone_comments : (
+        dict[str, list[str]],
+        dict[str, list[tuple[tuple[int, int],tuple[int, int]]]],
+        dict[str, tuple[tuple[int, int], tuple[int, int]]]
+    )
+
+    """
 
     set_document(document)
 
@@ -139,7 +168,13 @@ def parse_document(
     # Point: ((start_line, start_char), (end_line, end_char))
     identifer_with_points: dict[str, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(list)
 
-    tree = treesitter.PARSER.parse(read_callable)
+    if OLD_TREE is not None and changes is not None:
+        OLD_TREE.edit(*changes)
+
+    if OLD_TREE is not None:
+        tree = treesitter.PARSER.parse(read_callable, old_tree=OLD_TREE)
+    else:
+        tree = treesitter.PARSER.parse(read_callable)
 
     if treesitter.PROPERTIES["current-language"] is not None:
         query_str = get_query_from_file(COMMENTS_EXTRACTION_QUERY_FILE)

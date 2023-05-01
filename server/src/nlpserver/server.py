@@ -25,6 +25,7 @@ from lsprotocol.types import (
     TEXT_DOCUMENT_COMPLETION,
     TEXT_DOCUMENT_DID_CHANGE,
     TEXT_DOCUMENT_DID_OPEN,
+    TextDocumentSyncKind,
     CodeAction,
     CodeActionKind,
     CodeActionParams,
@@ -54,6 +55,8 @@ from pygls.protocol import _dict_to_object
 from pygls.server import LanguageServer
 
 from collections import defaultdict
+
+from typing import Optional
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -176,7 +179,31 @@ def create_warnings(params: DidChangeTextDocumentParams):
 
     document = server.workspace.get_document(params.text_document.uri)
 
-    IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS = parse_document(document)
+    log(f"\n {params.content_changes} \n")
+
+    changes: Optional[tuple[int,int,int,tuple[int, int], tuple[int, int], tuple[int, int]]] = None
+    if isinstance(params.content_changes, TextDocumentContentChangeEvent_Type1):
+
+        replaced: bool = params.content_changes.range_length > 0
+
+        # this might be same regardless of type of change
+        start_point = params.content_changes.range.start
+        start_byte = document.offset_at_position(start_point)
+
+        old_end_point = params.content_changes.range.end
+        old_end_byte = document.offset_at_position(new_end_point)
+
+        # this doesn't work
+        # as the behaviour is different for addion and deletion/replacement
+        # TODO fix this
+        raise Exception("This implementation is incomplete")
+
+        new_end_point = old_end_point
+        new_end_byte = old_end_point
+
+        changes = (start_byte, old_end_byte, new_end_byte, start_point, old_end_point, new_end_point)
+    
+    IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS = parse_document(document, changes)
     warnings_list: list[Diagnostic] = []
 
     for identifer, points in IDENTIFIER_WITH_POINTS.items():
@@ -307,6 +334,7 @@ def on_initialize(params: InitializeParams) -> ServerCapabilities:
     return ServerCapabilities(
         code_action_provider=True,
         completion_provider=CompletionOptions(resolve_provider=True),
+        text_document_sync=TextDocumentSyncKind.Incremental
     )
 
 
