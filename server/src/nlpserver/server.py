@@ -58,10 +58,10 @@ from collections import defaultdict
 server = LanguageServer("nlpserver", "v0.1")
 
 # setting these global as these are updated on each document update
-IDENTIFIER_WITH_COMMENTS: dict[str, list[str]] = defaultdict(list)
+IDENTIFIER_WITH_COMMENTS: dict[str, set[str]] = defaultdict(set)
 IDENTIFIER_WITH_POINTS: dict[
-    str, list[tuple[tuple[int, int], tuple[int, int]]]
-] = defaultdict(list)
+    str, set[tuple[tuple[int, int], tuple[int, int]]]
+] = defaultdict(set)
 # Empty dict
 ALL_LONE_COMMENTS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {}
 
@@ -117,31 +117,6 @@ def completions(params: CompletionParams):
     current_pos_index = document.offset_at_position(params.position)
 
     completion_items = []
-
-    """
-    This method is a bit hacky, as there is no way to
-    get the currently being typed identifier name for incomplete identifiers
-    """
-    # for unidentified variables
-    for comment, (start_point, end_point) in ALL_LONE_COMMENTS.items():
-
-        current_line = document.lines[current_line_number].strip()
-        first_word_of_the_line = current_line.split()[0]
-
-        # either the current position is the next line to the comment
-        comment_on_next_line = (current_line_number == end_point[0] + 1)
-
-        if comment_on_next_line and (
-            document.word_at_position(params.position) == first_word_of_the_line
-        ):
-            # TODO Variable naming logic goes here
-            # var_name = get_variable_name_from_comments(comments)
-
-            completion_items.append(CompletionItem("variable_name_1"))
-            completion_items.append(
-                CompletionItem("Variable_name_2", kind=CompletionItemKind.Variable)
-            )
-
 
     # give completion suggestion if it's a variable name after comment
     for (
@@ -278,6 +253,13 @@ def on_code_action(params: CodeActionParams) -> list[CodeAction] | None:
     improvable = False
 
     for identifier, _ranges in IDENTIFIER_WITH_POINTS.items():
+
+        # if the variable doens't have an associated comment/s
+        # we cannot suggest a name
+        # TODO suggest convention change based on the overall project/ files
+        if len(IDENTIFIER_WITH_COMMENTS[identifier]) < 1:
+            continue
+
         for (start, end) in _ranges:
             if (
                 range.start.line >= start[0] and range.end.line <= end[0]
