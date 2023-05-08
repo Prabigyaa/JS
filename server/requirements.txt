@@ -1,2 +1,4 @@
 pygls
 tree_sitter
+transformers
+torch
