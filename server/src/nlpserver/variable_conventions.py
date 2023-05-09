@@ -67,10 +67,11 @@ def get_convention(variable: str) -> list[VariableConventions]:
 
     # for different conventions like local variables, private variables or others
     while starts_with_under_scores:
+        variable = variable[1:]
         starts_with_under_scores = (
-            re.search(starting_with_under_scores, variable[1:]) is not None
+            re.search(starting_with_under_scores, variable) is not None
         )
-    # At this point, the remaining underscores (if any) shouldn't in the front
+    # At this point, the remaining underscores (if any) shouldn't be in the front
     contains_under_scores = re.search(containing_under_scores, variable) is not None
 
     matched_conventions: list[VariableConventions] = []
