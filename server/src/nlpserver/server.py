@@ -51,9 +51,12 @@ from lsprotocol.types import (
 from pygls.protocol import _dict_to_object
 from pygls.server import LanguageServer
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from predict_variables import initalize_model, get_variable_name
+from variable_conventions import VariableConventions, get_convention
+from convert import set_convention
+
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -67,6 +70,9 @@ ALL_LONE_COMMENTS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {}
 
 # keeping track of previous inferences
 COMMENTS_AND_VARIABLE_NAME: dict[str, set[str]] = defaultdict(set)
+
+# the convention begin followed up to now
+FOLLOWED_CONVENTION: VariableConventions = VariableConventions.Undefined
 
 
 def get_variable_name_with_cache(comment: str):
@@ -86,8 +92,14 @@ def get_variable_name_with_cache(comment: str):
         var_name = get_variable_name(comment)
         variable_set = set()
         if var_name is not None:
-            variable_set.add(var_name)
-            COMMENTS_AND_VARIABLE_NAME[comment].add(var_name)
+
+            #TODO the logic needs to change based on the type of identifier
+            var_with_convention = set_convention(var_name.split(), FOLLOWED_CONVENTION)
+
+            variable_set.add(var_with_convention)
+
+
+            COMMENTS_AND_VARIABLE_NAME[comment].add(var_with_convention)
     
     yield variable_set.pop()
 
@@ -175,7 +187,7 @@ def create_warnings(params: DidChangeTextDocumentParams):
 
     TODO check incorrect/ non-optimal variable names
     """
-    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS
+    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS, FOLLOWED_CONVENTION
 
     document = server.workspace.get_document(params.text_document.uri)
 
@@ -201,6 +213,7 @@ def create_warnings(params: DidChangeTextDocumentParams):
                             code="WN_100",  # wrong name
                         )
                     )
+    FOLLOWED_CONVENTION = get_major_conventions()
 
     server.publish_diagnostics(document.uri, warnings_list)
 
@@ -315,6 +328,24 @@ def on_code_action(params: CodeActionParams) -> list[CodeAction] | None:
         if improvable
         else None
     )
+
+
+def get_major_conventions() -> VariableConventions:
+    global IDENTIFIER_WITH_POINTS
+
+    all_conventions: list[VariableConventions] = []
+
+    for identifier, _ in IDENTIFIER_WITH_POINTS.items():
+        all_conventions.append(*get_convention(identifier))
+
+    counter = Counter(all_conventions)
+
+    most_common_convention: VariableConventions = counter.most_common(1)[0][0]
+
+    if most_common_convention is None:
+        return VariableConventions.Undefined
+    else:
+        return most_common_convention
 
 
 @server.feature(INITIALIZE)

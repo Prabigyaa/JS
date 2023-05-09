@@ -23,6 +23,10 @@ class VariableConventions(Enum):
 
     Screamingsnakecase = 6
 
+    KebabCase = 7
+
+    MajorConventions = [Snakecase, Camelcase, Pascalcase, Screamingsnakecase]
+
 
 def get_convention(variable: str) -> list[VariableConventions]:
     """
@@ -38,6 +42,7 @@ def get_convention(variable: str) -> list[VariableConventions]:
     starting_with_small_letters = r"^[a-z]"
     containing_under_scores = r"_+"
     starting_with_under_scores = r"^_"
+    containing_dashes = "-"
 
     contains_capital_letters = (
         re.search(containing_capital_letters, variable) is not None
@@ -57,6 +62,8 @@ def get_convention(variable: str) -> list[VariableConventions]:
     starts_with_under_scores = (
         re.search(starting_with_under_scores, variable) is not None
     )
+
+    contains_dashes = re.search(containing_dashes, variable) is not None
 
     # for different conventions like local variables, private variables or others
     while starts_with_under_scores:
@@ -85,6 +92,10 @@ def get_convention(variable: str) -> list[VariableConventions]:
 
         if contains_capital_letters:
             matched_conventions.append(VariableConventions.Camelcase)
+
+    if contains_dashes:
+
+        matched_conventions.append(VariableConventions.KebabCase)
 
     if len(matched_conventions) == 0:
         # some other cases
