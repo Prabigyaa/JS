@@ -14,7 +14,7 @@ def set_convention(words: list[str], convention: VariableConventions)->str:
         for word in wordsForVariable:
             variable+=word
     
-    elif convention==VariableConventions.Snakecase:
+    elif convention==VariableConventions.Pascalcase:
         wordsForVariable=[word.title() for word in words]#.insert(0,words[0])
         
         for word in wordsForVariable:
@@ -27,7 +27,7 @@ def set_convention(words: list[str], convention: VariableConventions)->str:
             variable+=word+"-"
         variable=variable[:-1]
 
-    elif convention==VariableConventions.Pascalcase or convention==VariableConventions.Undefined:
+    elif convention==VariableConventions.Snakecase or convention==VariableConventions.Undefined:
         wordsForVariable=[word.lower() for word in words]#.insert(0,words[0])
             
         for word in wordsForVariable:

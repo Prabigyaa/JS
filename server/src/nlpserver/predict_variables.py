@@ -64,7 +64,7 @@ def initalize_model(model_name: str = MODEL_NAME, use_local: bool = True):
     TOKENIZER.save_pretrained(model_name, from_pt=True)
 
 
-def get_variable_name(comment: str) -> Optional[str]:
+def get_variable_name(comment: str, **kwargs) -> Optional[str]:
     """
     Returns space separated variable parts if successful else returns None
     """
@@ -84,7 +84,8 @@ def get_variable_name(comment: str) -> Optional[str]:
             max_length=100,
             early_stopping=True,
             use_cache=True,
-            do_sample=True
+            do_sample=True,
+            kwargs=kwargs
         ).to(DEVICE)
 
         output_variable_name = TOKENIZER.decode(
