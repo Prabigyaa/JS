@@ -53,7 +53,8 @@ from pygls.server import LanguageServer
 
 from collections import defaultdict, Counter
 
-from predict_variables import initalize_model, get_variable_name, MODEL, TOKENIZER
+from predict_variables import initalize_model, get_variable_name
+import predict_variables
 from variable_conventions import VariableConventions, get_convention
 from convert import set_convention
 
@@ -166,13 +167,13 @@ def completions(params: CompletionParams):
             for (start, end) in IDENTIFIER_WITH_POINTS[identifier]:
                 if (current_line_number == start[0]) or (current_line_number == end[0]):
 
-                    if TOKENIZER is not None:
-                        force_words_ids = TOKENIZER(identifier, add_special_tokens=False).input_ids
+                    if predict_variables.TOKENIZER is not None:
+                        force_words_ids = predict_variables.TOKENIZER(identifier, add_special_tokens=False).input_ids
                         
                         # passing the already present incomplete identifier/ not sure if this works
                         var_names = get_variable_name_with_cache(comment, force_regenerate=True, force_words_ids=force_words_ids)
                     else:
-                        var_names = get_variable_name_with_cache(comment)
+                        var_names = get_variable_name_with_cache(comment, force_regenerate=True)
 
                     for var_name in var_names:
                         if var_name is not None:
