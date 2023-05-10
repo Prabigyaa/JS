@@ -51,9 +51,13 @@ from lsprotocol.types import (
 from pygls.protocol import _dict_to_object
 from pygls.server import LanguageServer
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from predict_variables import initalize_model, get_variable_name
+import predict_variables
+from variable_conventions import VariableConventions, get_convention
+from convert import set_convention
+
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -68,8 +72,11 @@ ALL_LONE_COMMENTS: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {}
 # keeping track of previous inferences
 COMMENTS_AND_VARIABLE_NAME: dict[str, set[str]] = defaultdict(set)
 
+# the convention begin followed up to now
+FOLLOWED_CONVENTION: VariableConventions = VariableConventions.Undefined
 
-def get_variable_name_with_cache(comment: str):
+
+def get_variable_name_with_cache(comment: str, force_regenerate=False, **kwargs):
     """
     Returns the variable from cache if available if not
     gets the variable name from model
@@ -80,14 +87,20 @@ def get_variable_name_with_cache(comment: str):
         return
 
     # the set keeps one variable name, i.e. whole name not the parts
-    if len(COMMENTS_AND_VARIABLE_NAME[comment]) > 0:
+    if not force_regenerate and len(COMMENTS_AND_VARIABLE_NAME[comment]) > 0:
         variable_set = COMMENTS_AND_VARIABLE_NAME[comment].copy()
     else:
-        var_name = get_variable_name(comment)
+        var_name = get_variable_name(comment, **kwargs)
         variable_set = set()
         if var_name is not None:
-            variable_set.add(var_name)
-            COMMENTS_AND_VARIABLE_NAME[comment].add(var_name)
+
+            #TODO the logic needs to change based on the type of identifier
+            var_with_convention = set_convention(var_name.split(), FOLLOWED_CONVENTION)
+
+            variable_set.add(var_with_convention)
+
+
+            COMMENTS_AND_VARIABLE_NAME[comment].add(var_with_convention)
     
     yield variable_set.pop()
 
@@ -153,15 +166,20 @@ def completions(params: CompletionParams):
         for comment in comments:
             for (start, end) in IDENTIFIER_WITH_POINTS[identifier]:
                 if (current_line_number == start[0]) or (current_line_number == end[0]):
-                    
-                    # passing the already present incomplete identifier/ not sure if this works
-                    var_names = get_variable_name_with_cache(comment + " " + identifier)
+
+                    if predict_variables.TOKENIZER is not None:
+                        force_words_ids = predict_variables.TOKENIZER(identifier, add_special_tokens=False).input_ids
+                        
+                        # passing the already present incomplete identifier/ not sure if this works
+                        var_names = get_variable_name_with_cache(comment, force_regenerate=True, force_words_ids=force_words_ids)
+                    else:
+                        var_names = get_variable_name_with_cache(comment, force_regenerate=True)
 
                     for var_name in var_names:
                         if var_name is not None:
                             completion_items.append(
                                 CompletionItem(
-                                    var_name, kind=CompletionItemKind.Variable
+                                    var_name, kind=CompletionItemKind.Keyword, filter_text=identifier # hack for vscode filtering out variable not containing the already typed characters.
                                 )
                             )
 
@@ -175,7 +193,7 @@ def create_warnings(params: DidChangeTextDocumentParams):
 
     TODO check incorrect/ non-optimal variable names
     """
-    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS
+    global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS, FOLLOWED_CONVENTION
 
     document = server.workspace.get_document(params.text_document.uri)
 
@@ -187,6 +205,10 @@ def create_warnings(params: DidChangeTextDocumentParams):
         if IDENTIFIER_WITH_COMMENTS[identifer] is not None:
             severity = DiagnosticSeverity.Hint
             variable_name = next(get_variable_name_with_cache(" ".join(IDENTIFIER_WITH_COMMENTS[identifer])), None)
+
+            # don't create hints if it's the same name
+            if variable_name == identifer:
+                continue
 
             if variable_name is not None:
                 message = f"Change to variable name {variable_name}"
@@ -201,6 +223,7 @@ def create_warnings(params: DidChangeTextDocumentParams):
                             code="WN_100",  # wrong name
                         )
                     )
+    FOLLOWED_CONVENTION = get_major_conventions()
 
     server.publish_diagnostics(document.uri, warnings_list)
 
@@ -315,6 +338,24 @@ def on_code_action(params: CodeActionParams) -> list[CodeAction] | None:
         if improvable
         else None
     )
+
+
+def get_major_conventions() -> VariableConventions:
+    global IDENTIFIER_WITH_POINTS
+
+    all_conventions: list[VariableConventions] = []
+
+    for identifier, _ in IDENTIFIER_WITH_POINTS.items():
+        all_conventions.append(*get_convention(identifier))
+
+    counter = Counter(all_conventions)
+
+    most_common_convention: VariableConventions = counter.most_common(1)[0][0]
+
+    if most_common_convention is None:
+        return VariableConventions.Undefined
+    else:
+        return most_common_convention
 
 
 @server.feature(INITIALIZE)
