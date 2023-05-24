@@ -2,3 +2,5 @@ pygls
 tree_sitter
 transformers
 torch
+langchain
+python-dotenv

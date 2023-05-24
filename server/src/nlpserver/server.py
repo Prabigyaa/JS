@@ -55,9 +55,16 @@ from collections import defaultdict, Counter
 
 from predict_variables import initalize_model, get_variable_name
 import predict_variables
+from inference_with_langchain import (
+    initialize_langchain,
+    get_variable_names_from_langchain,
+)
+
+from dotenv import load_dotenv
+import pathlib
+
 from variable_conventions import VariableConventions, get_convention
 from convert import set_convention
-
 
 server = LanguageServer("nlpserver", "v0.1")
 
@@ -75,14 +82,83 @@ COMMENTS_AND_VARIABLE_NAME: dict[str, set[str]] = defaultdict(set)
 # the convention begin followed up to now
 FOLLOWED_CONVENTION: VariableConventions = VariableConventions.Undefined
 
+# setting this as global as every prediction must follow the same inference method
+RUN_INFERENCE_LOCALLY: bool = False
+
+DOT_ENV_FILE_PATH = pathlib.Path(__file__).parents[2].joinpath(".env")
+
+def get_variable_names_with_cache(
+    comments: list[str], force_regenerate=False, **kwargs
+) -> list[set[str]]:
+    """
+    Returns the corresponding variable name for the comments.
+    TODO: Pass force words for langchain inference
+
+    Parameters
+    ---
+    comments: A list of comment
+    force_regenerate: Either to re-run the inference despite a varible already being know for the given comment
+
+    Return
+    ---
+    The list of set of variable names for comments received in order
+    """
+    global COMMENTS_AND_VARIABLE_NAME
+
+    # not running inferencing on already seen comments
+    unseen_comments: list[str] = []
+    comment_var_dict: dict[str, set[str]] = defaultdict(set)
+
+    for comment in comments:
+        # the set keeps one variable name, i.e. whole name not the parts
+        if not force_regenerate and len(COMMENTS_AND_VARIABLE_NAME[comment]) > 0:
+            variable_set = COMMENTS_AND_VARIABLE_NAME[comment].copy()
+            comment_var_dict[comment] = variable_set
+        else:
+            unseen_comments.append(comment)
+
+    if not RUN_INFERENCE_LOCALLY:
+        temp_outputs = get_variable_names_from_langchain(unseen_comments)
+
+        if temp_outputs is not None:
+            for comment, var_name in temp_outputs.items():
+                var_with_convention = set_convention(
+                var_name.split(), FOLLOWED_CONVENTION
+                )
+                COMMENTS_AND_VARIABLE_NAME[comment].add(var_with_convention)
+                comment_var_dict[comment].add(var_with_convention)
+    else:
+        for comment in unseen_comments:
+            var_name = get_variable_name(comment, **kwargs)
+            if var_name is not None:
+                var_with_convention = set_convention(
+                var_name.split(), FOLLOWED_CONVENTION
+                )
+                COMMENTS_AND_VARIABLE_NAME[comment].add(var_with_convention)
+                comment_var_dict[comment].add(var_with_convention)
+
+    return [var_name for _, var_name in comment_var_dict.items()]
+    
+
 
 def get_variable_name_with_cache(comment: str, force_regenerate=False, **kwargs):
     """
-    Returns the variable from cache if available if not
+    Returns the variable name for comment.
+    TODO: Pass force words for langchain inference
+
+    Parameters
+    ---
+    comment: The input comment
+    force_regenerate: Either to re-run the inference despite a varible already being know for the given comment
+
+    Return
+    ---
+    The variable from cache if available if not
     gets the variable name from model
     """
     global COMMENTS_AND_VARIABLE_NAME
 
+        
     if len(comment) < 1:  # not a empty string
         return
 
@@ -90,19 +166,28 @@ def get_variable_name_with_cache(comment: str, force_regenerate=False, **kwargs)
     if not force_regenerate and len(COMMENTS_AND_VARIABLE_NAME[comment]) > 0:
         variable_set = COMMENTS_AND_VARIABLE_NAME[comment].copy()
     else:
-        var_name = get_variable_name(comment, **kwargs)
+        if RUN_INFERENCE_LOCALLY:
+            var_name = get_variable_name(comment, **kwargs)
+        else:
+            output_from_langchain = get_variable_names_from_langchain([comment])
+
+            if output_from_langchain is not None:
+                var_name = output_from_langchain[comment]
+            else:
+                var_name = None
+
         variable_set = set()
         if var_name is not None:
-
-            #TODO the logic needs to change based on the type of identifier
-            var_with_convention = set_convention(var_name.split(), FOLLOWED_CONVENTION)
+            # TODO the logic needs to change based on the type of identifier
+            var_with_convention = set_convention(
+                var_name.split(), FOLLOWED_CONVENTION
+            )
 
             variable_set.add(var_with_convention)
 
+            (COMMENTS_AND_VARIABLE_NAME[comment]).add(var_with_convention)
 
-            COMMENTS_AND_VARIABLE_NAME[comment].add(var_with_convention)
-    
-    yield variable_set.pop()
+        yield variable_set.pop()
 
 
 @server.feature(TEXT_DOCUMENT_DID_OPEN)
@@ -162,24 +247,32 @@ def completions(params: CompletionParams):
         identifier,
         comments,
     ) in IDENTIFIER_WITH_COMMENTS.items():  # checking for all the comments
-
         for comment in comments:
-            for (start, end) in IDENTIFIER_WITH_POINTS[identifier]:
+            for start, end in IDENTIFIER_WITH_POINTS[identifier]:
                 if (current_line_number == start[0]) or (current_line_number == end[0]):
-
                     if predict_variables.TOKENIZER is not None:
-                        force_words_ids = predict_variables.TOKENIZER(identifier, add_special_tokens=False).input_ids
-                        
+                        force_words_ids = predict_variables.TOKENIZER(
+                            identifier, add_special_tokens=False
+                        ).input_ids
+
                         # passing the already present incomplete identifier/ not sure if this works
-                        var_names = get_variable_name_with_cache(comment, force_regenerate=True, force_words_ids=force_words_ids)
+                        var_names = get_variable_name_with_cache(
+                            comment,
+                            force_regenerate=True,
+                            force_words_ids=force_words_ids,
+                        )
                     else:
-                        var_names = get_variable_name_with_cache(comment, force_regenerate=True)
+                        var_names = get_variable_name_with_cache(
+                            comment, force_regenerate=True
+                        )
 
                     for var_name in var_names:
                         if var_name is not None:
                             completion_items.append(
                                 CompletionItem(
-                                    var_name, kind=CompletionItemKind.Keyword, filter_text=identifier # hack for vscode filtering out variable not containing the already typed characters.
+                                    var_name,
+                                    kind=CompletionItemKind.Keyword,
+                                    filter_text=identifier,  # hack for vscode filtering out variable not containing the already typed characters.
                                 )
                             )
 
@@ -197,14 +290,28 @@ def create_warnings(params: DidChangeTextDocumentParams):
 
     document = server.workspace.get_document(params.text_document.uri)
 
-    IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS = parse_document(document)
+    (
+        IDENTIFIER_WITH_COMMENTS,
+        IDENTIFIER_WITH_POINTS,
+        ALL_LONE_COMMENTS,
+    ) = parse_document(document)
     warnings_list: list[Diagnostic] = []
 
+    # if using langchain generating for a bunch of comments at once
+    if not RUN_INFERENCE_LOCALLY:
+        all_comments = [" ".join(comments) for _, comments in IDENTIFIER_WITH_COMMENTS.items()]
+
+        get_variable_names_with_cache(all_comments)
+
     for identifer, points in IDENTIFIER_WITH_POINTS.items():
-        
         if IDENTIFIER_WITH_COMMENTS[identifer] is not None:
             severity = DiagnosticSeverity.Hint
-            variable_name = next(get_variable_name_with_cache(" ".join(IDENTIFIER_WITH_COMMENTS[identifer])), None)
+            variable_name = next(
+                get_variable_name_with_cache(
+                    " ".join(IDENTIFIER_WITH_COMMENTS[identifer])
+                ),
+                None,
+            )
 
             # don't create hints if it's the same name
             if variable_name == identifer:
@@ -252,8 +359,10 @@ def rename_identifier(ls: LanguageServer, *args):
         and isinstance(text_document, TextDocumentIdentifier)
         and isinstance(range, Range)
     ):
-        range = Range(Position(range.start.line, range.start.character),
-                      Position(range.end.line, range.end.character))
+        range = Range(
+            Position(range.start.line, range.start.character),
+            Position(range.end.line, range.end.character),
+        )
         document = ls.workspace.get_document(text_document.uri)
         problem_start = document.offset_at_position(range.start)
         problem_end = document.offset_at_position(range.end)
@@ -262,7 +371,9 @@ def rename_identifier(ls: LanguageServer, *args):
 
         comments = IDENTIFIER_WITH_COMMENTS[old_identifier]
         if len(comments) > 0:
-            new_identifier = next(get_variable_name_with_cache(" ".join(comments)), None)
+            new_identifier = next(
+                get_variable_name_with_cache(" ".join(comments)), None
+            )
 
             if new_identifier is not None:
                 versioned_text_document = VersionedTextDocumentIdentifier(
@@ -277,11 +388,15 @@ def rename_identifier(ls: LanguageServer, *args):
                         _range = Range(Position(*start), Position(*end))
                         # if hasn't been edited
                         if _range != range:
-                            edits.append(TextEdit(range=_range, new_text=new_identifier))
+                            edits.append(
+                                TextEdit(range=_range, new_text=new_identifier)
+                            )
 
                 workspacedit = WorkspaceEdit(
                     document_changes=[
-                        TextDocumentEdit(text_document=versioned_text_document, edits=edits)
+                        TextDocumentEdit(
+                            text_document=versioned_text_document, edits=edits
+                        )
                     ]
                 )
 
@@ -305,14 +420,13 @@ def on_code_action(params: CodeActionParams) -> list[CodeAction] | None:
     improvable = False
 
     for identifier, _ranges in IDENTIFIER_WITH_POINTS.items():
-
         # if the variable doens't have an associated comment/s
         # we cannot suggest a name
         # TODO suggest convention change based on the overall project/ files
         if len(IDENTIFIER_WITH_COMMENTS[identifier]) < 1:
             continue
 
-        for (start, end) in _ranges:
+        for start, end in _ranges:
             if (
                 range.start.line >= start[0] and range.end.line <= end[0]
             ):  # if in between the lines of identifer
@@ -366,6 +480,14 @@ def on_initialize(params: InitializeParams) -> ServerCapabilities:
     TODO properly set all the server capabilities
     """
 
+    log(f"Attempting to load environment variables from {str(DOT_ENV_FILE_PATH)}")
+
+    # loading the environment variables from the path
+    if load_dotenv(dotenv_path=str(DOT_ENV_FILE_PATH), verbose=True, override=True):
+        log("Loaded variables from .env file")
+    else:
+        log("No variables were loaded from .env file")
+
     return ServerCapabilities(
         code_action_provider=True,
         completion_provider=CompletionOptions(resolve_provider=True),
@@ -390,9 +512,15 @@ async def after_initialized(params: InitializedParams):
     else:
         log("Failed to create language objects.")
 
-    log("Initializing model")
-
-    initalize_model(use_local=True)  
+    if RUN_INFERENCE_LOCALLY:
+        log("Initializing model locally.")
+        initalize_model(use_local=True)
+    else:
+        log("Initializing model using langchain")
+        if initialize_langchain(api_key=None):
+            log("Langchain initialization successful")
+        else:
+            log("Langchain initialization failed")
 
 
 @events.on_event("log")
