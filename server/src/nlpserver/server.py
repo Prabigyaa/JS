@@ -85,6 +85,7 @@ FOLLOWED_CONVENTION: VariableConventions = VariableConventions.Undefined
 # setting this as global as every prediction must follow the same inference method
 RUN_INFERENCE_LOCALLY: bool = False
 
+# search for environment variables definitions in server/.env
 DOT_ENV_FILE_PATH = pathlib.Path(__file__).parents[2].joinpath(".env")
 
 def get_variable_names_with_cache(
@@ -296,12 +297,6 @@ def create_warnings(params: DidChangeTextDocumentParams):
         ALL_LONE_COMMENTS,
     ) = parse_document(document)
     warnings_list: list[Diagnostic] = []
-
-    # if using langchain generating for a bunch of comments at once
-    if not RUN_INFERENCE_LOCALLY:
-        all_comments = [" ".join(comments) for _, comments in IDENTIFIER_WITH_COMMENTS.items()]
-
-        get_variable_names_with_cache(all_comments)
 
     for identifer, points in IDENTIFIER_WITH_POINTS.items():
         if IDENTIFIER_WITH_COMMENTS[identifer] is not None:
