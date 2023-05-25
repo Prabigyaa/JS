@@ -29,8 +29,9 @@ def get_both() -> dict[str, list[str]]:
             if package != "":  # if not empty
                 try:
                     importlib.import_module(
-                        package.replace("-", "_")
+                        package.replace("-", "_").removeprefix("python_")
                     )  # a package with name package-name is usually imported as package_name
+                       # and removing the python- prefix presnet in most package names
                     deps_found.append(package)
                 except ImportError:
                     deps_required.append(package)
