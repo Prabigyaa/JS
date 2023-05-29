@@ -188,7 +188,7 @@ def get_variable_name_with_cache(comment: str, force_regenerate=False, **kwargs)
 
             (COMMENTS_AND_VARIABLE_NAME[comment]).add(var_with_convention)
 
-        yield variable_set.pop()
+    yield variable_set.pop()
 
 
 @server.feature(TEXT_DOCUMENT_DID_OPEN)
@@ -290,7 +290,6 @@ def create_warnings(params: DidChangeTextDocumentParams):
     global IDENTIFIER_WITH_COMMENTS, IDENTIFIER_WITH_POINTS, ALL_LONE_COMMENTS, FOLLOWED_CONVENTION
 
     document = server.workspace.get_document(params.text_document.uri)
-
     (
         IDENTIFIER_WITH_COMMENTS,
         IDENTIFIER_WITH_POINTS,
