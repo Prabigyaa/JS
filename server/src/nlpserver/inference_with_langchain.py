@@ -85,8 +85,8 @@ def get_variable_names_from_langchain(comments: list[str], **kwargs) -> Optional
     start_time = time.time()
     outputs = LLM_CHAIN.generate(comment_dictionaries)
     end_time = time.time()
-    post_event("log", f"Finished inference on langchain for {comment_dictionaries}")
-    post_event("log", f"\tThe inference took {end_time - start_time} seconds.\n")
+    post_event("log", f"\tThe inference took {end_time - start_time} seconds.")
+    post_event("log", f"Finished inference on langchain for {comment_dictionaries}. \n")
 
     comment_variable_dict: dict[str, str] = {}
 

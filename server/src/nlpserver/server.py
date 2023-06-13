@@ -178,15 +178,24 @@ def get_variable_name_with_cache(comment: str, force_regenerate=False, **kwargs)
                 var_name = None
 
         variable_set = set()
-        if var_name is not None:
-            # TODO the logic needs to change based on the type of identifier
-            var_with_convention = set_convention(
-                var_name.split(), FOLLOWED_CONVENTION
-            )
+        if var_name is None:
+            log(f"Couldn't get variable name for the comment '{comment}'")
 
-            variable_set.add(var_with_convention)
+            if RUN_INFERENCE_LOCALLY:
+                log(f"Local inference isn't configured properly")
+            else:
+                log(f"Remote inference isn't configured properly or error response from the api server.")
 
-            (COMMENTS_AND_VARIABLE_NAME[comment]).add(var_with_convention)
+            return
+
+        # TODO the logic needs to change based on the type of identifier
+        var_with_convention = set_convention(
+            var_name.split(), FOLLOWED_CONVENTION
+        )
+
+        variable_set.add(var_with_convention)
+
+        (COMMENTS_AND_VARIABLE_NAME[comment]).add(var_with_convention)
 
     yield variable_set.pop()
 
