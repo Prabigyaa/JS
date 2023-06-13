@@ -56,5 +56,15 @@
     (comment) @all_comments
 
     ;; all the identifiers, becuase lone identifiers couldn't be filtered
-    (identifier) @all_identifiers
+    ;; the function calls aren't captured, so can cause problem while renaming
+    [(
+	expression_statement 
+		(assignment
+        	left: (identifier) @identifier
+        )
+    )
+    (
+        function_definition (identifier) @identifier
+    )
+    ] 
 ])
